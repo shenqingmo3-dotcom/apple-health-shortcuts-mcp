@@ -17,7 +17,7 @@ from docx.shared import Cm, Mm, Pt, RGBColor
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "GUIDE.zh-CN.md"
+SOURCE = ROOT / "GUIDE-MOBILE.zh-CN.md"
 OUTPUT_DIR = ROOT / "dist"
 OUTPUT = OUTPUT_DIR / "Apple-Health-快捷指令-MCP-从零搭建教程.docx"
 
@@ -232,7 +232,7 @@ def add_cover(document: Document) -> None:
     title.add_run("让 AI 看懂我的\nApple 健康")
 
     subtitle = document.add_paragraph(style="Subtitle")
-    subtitle.add_run("完全免费方案：iPhone 快捷指令 + Cloudflare + HTTP MCP")
+    subtitle.add_run("中国时区默认版：只用手机 + Cloudflare 一键部署 + HTTP MCP")
 
     rule = document.add_paragraph()
     rule.paragraph_format.space_before = Pt(14)
@@ -243,8 +243,8 @@ def add_cover(document: Document) -> None:
     intro = document.add_paragraph()
     intro.paragraph_format.space_after = Pt(10)
     run = intro.add_run(
-        "手表把数据交给 iPhone，快捷指令每天抄一份，"
-        "Cloudflare 替你保管，AI 需要时再来读。"
+        "不用电脑，不改代码，不填数据库编号。"
+        "手机一键部署后，网页自动生成钥匙。"
     )
     run.font.size = Pt(15)
     run.font.bold = True
@@ -261,8 +261,8 @@ def add_cover(document: Document) -> None:
             set_cell_border(cell, PALE_BLUE, "0")
             cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
     facts = [
-        ("云端费用", "个人轻量使用通常可在免费额度内"),
-        ("电脑", "只在部署时使用，之后可以关机"),
+        ("默认时区", "中国 Asia/Shanghai"),
+        ("所需设备", "一台 iPhone；Apple Watch 可选"),
         ("AI 权限", "只有 3 个只读工具"),
     ]
     for row, (left, right) in zip(box.rows, facts):
@@ -278,7 +278,7 @@ def add_cover(document: Document) -> None:
     document.add_paragraph()
     version = document.add_paragraph()
     version.paragraph_format.space_before = Pt(54)
-    vrun = version.add_run("分享版教程 · 1.0 · 2026 年 7 月")
+    vrun = version.add_run("手机分享版教程 · 2.0 · 2026 年 7 月")
     vrun.font.size = Pt(9)
     vrun.font.color.rgb = RGBColor.from_string(MUTED)
     document.add_page_break()
@@ -309,14 +309,13 @@ def add_running_header_footer(section) -> None:
 def add_contents(document: Document) -> None:
     document.add_heading("拿着这张地图走", level=1)
     p = document.add_paragraph()
-    add_inline(p, "第一次部署只需完成 1～6；iPhone 设置在 7～10；AI 连接在 11。")
+    add_inline(p, "先在手机一键部署并领取钥匙，再安装快捷指令，最后把 MCP 交给 AI。")
     items = [
-        "1～2　下载代码，安装电脑小助手",
-        "3～6　Cloudflare 登录、建数据库、放钥匙、部署",
-        "7～9　心率、其他指标、睡眠快捷指令",
-        "10　让 iPhone 每天自己运行",
-        "11　把 3 个只读 MCP 工具交给 AI",
-        "12～16　优缺点、排错、隐私和最终检查",
+        "第一～二部分　手机一键部署，打开设置页领取钥匙",
+        "第三～五部分　安装或制作健康、睡眠快捷指令",
+        "第六～七部分　自动运行并把 3 个工具交给 AI",
+        "第八部分　群主制作 iCloud 链接，让群友点链接安装",
+        "最后　优缺点与完成检查",
     ]
     for item in items:
         paragraph = document.add_paragraph(style="List Bullet")
@@ -327,7 +326,7 @@ def add_contents(document: Document) -> None:
     shade_paragraph(note, PALE_TEAL)
     add_inline(
         note,
-        "重要：公开分享代码和教程没有问题，但任何人的 Worker 地址、数据库编号和两把钥匙都不能跟着公开。",
+        "重要：公开分享代码和教程没有问题，但任何人的 Worker 地址、部署密码和两把钥匙都不能跟着公开。",
         color=TEAL,
     )
 

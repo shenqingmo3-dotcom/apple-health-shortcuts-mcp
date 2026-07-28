@@ -4,6 +4,12 @@
 
 这是一个独立、从零编写的开源小项目。它不依赖付费健康导出 App，也不属于任何聊天软件或角色平台。
 
+## 只用手机一键部署
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/shenqingmo3-dotcom/apple-health-shortcuts-mcp)
+
+默认时区是中国 `Asia/Shanghai`。Cloudflare 会自动创建数据库，不需要电脑、终端、数据库编号或改代码。
+
 ## 它像什么？
 
 ```text
@@ -26,17 +32,19 @@ AI 只会看到三个工具：
 
 ## 从哪里开始？
 
-请直接阅读：
+请优先阅读：
 
-- [网页版《从零搭建教程》](GUIDE.zh-CN.md)
+- [只用手机《从零搭建教程》](GUIDE-MOBILE.zh-CN.md)
 - [适合转发和打印的 Word 教程](docs/Apple-Health-快捷指令-MCP-从零搭建教程.docx)
 
-教程从注册 Cloudflare 开始，连每个按钮和要复制的字都写了。
+需要命令行排错时，再看[电脑高级版教程](GUIDE.zh-CN.md)。
 
 ## 项目里的东西
 
 - `src/index.ts`：独立 Worker 与 MCP 代码。
+- `GUIDE-MOBILE.zh-CN.md`：默认推荐的手机教程。
 - `schema.sql`：健康数据的小抽屉。
+- `migrations/`：一键部署时自动建立数据表。
 - `wrangler.toml`：Cloudflare 项目设置。
 - `scripts/make-keys.mjs`：生成两把私人钥匙。
 - `examples/`：不含真人信息的虚构示例。

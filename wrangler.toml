@@ -8,10 +8,11 @@ database_name = "apple-health-shortcuts"
 database_id = "PASTE_YOUR_D1_DATABASE_ID_HERE"
 
 [vars]
-HEALTH_TIME_ZONE = "Pacific/Auckland"
+HEALTH_TIME_ZONE = "Asia/Shanghai"
 MCP_ALLOW_ORIGIN = "*"
 RAW_RETENTION_DAYS = "35"
 SLEEP_RETENTION_DAYS = "120"
+GUIDE_URL = "https://github.com/shenqingmo3-dotcom/apple-health-shortcuts-mcp/blob/main/GUIDE-MOBILE.zh-CN.md"
 
 [triggers]
 crons = ["23 3 * * *"]

@@ -19,12 +19,14 @@ export interface D1Database {
 
 export interface Env {
   DB: D1Database;
-  UPLOAD_KEY: string;
-  MCP_ACCESS_KEY: string;
+  SETUP_KEY?: string;
+  UPLOAD_KEY?: string;
+  MCP_ACCESS_KEY?: string;
   HEALTH_TIME_ZONE?: string;
   MCP_ALLOW_ORIGIN?: string;
   RAW_RETENTION_DAYS?: string;
   SLEEP_RETENTION_DAYS?: string;
+  GUIDE_URL?: string;
 }
 
 interface ExecutionContextLike {
@@ -151,6 +153,8 @@ const ACTIVITY_METRICS = new Set<MetricName>([
   "apple_exercise_time",
 ]);
 
+const DEFAULT_TIME_ZONE = "Asia/Shanghai";
+
 export const TOOLS = [
   {
     name: "health_now",
@@ -239,6 +243,11 @@ CREATE TABLE IF NOT EXISTS sleep_nights (
 );
 CREATE INDEX IF NOT EXISTS idx_sleep_nights_date
   ON sleep_nights(night_date DESC);
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 `;
 
 function json(data: unknown, status = 200, env?: Env): Response {
@@ -451,7 +460,14 @@ async function ensureSchema(env: Env): Promise<void> {
 }
 
 async function ingest(request: Request, env: Env): Promise<Response> {
-  if (!constantTimeEqual(request.headers.get("x-upload-key"), env.UPLOAD_KEY)) {
+  if (
+    !(await tokenMatches(
+      env,
+      "upload_token_hash",
+      request.headers.get("x-upload-key"),
+      env.UPLOAD_KEY,
+    ))
+  ) {
     return json({ ok: false, error: "上传钥匙不对。" }, 401, env);
   }
 
@@ -482,7 +498,7 @@ async function ingest(request: Request, env: Env): Promise<Response> {
 
   await ensureSchema(env);
   const now = new Date().toISOString();
-  const timeZone = env.HEALTH_TIME_ZONE || "UTC";
+  const timeZone = env.HEALTH_TIME_ZONE || DEFAULT_TIME_ZONE;
   const metricStatements = normalized.metrics.map((item) =>
     env.DB.prepare(
       `INSERT INTO metric_samples
@@ -554,7 +570,10 @@ async function ingest(request: Request, env: Env): Promise<Response> {
   );
 }
 
-function constantTimeEqual(received: string | null, expected: string): boolean {
+function constantTimeEqual(
+  received: string | null | undefined,
+  expected: string | null | undefined,
+): boolean {
   if (!received || !expected || received.length !== expected.length) return false;
   let difference = 0;
   for (let index = 0; index < received.length; index += 1) {
@@ -563,10 +582,35 @@ function constantTimeEqual(received: string | null, expected: string): boolean {
   return difference === 0;
 }
 
-function authorizedMcp(request: Request, env: Env): boolean {
+async function sha256(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function tokenMatches(
+  env: Env,
+  settingName: string,
+  received: string | null,
+  legacySecret?: string,
+): Promise<boolean> {
+  if (!received) return false;
+  await ensureSchema(env);
+  const row = await env.DB.prepare(
+    "SELECT value FROM app_settings WHERE key = ?",
+  )
+    .bind(settingName)
+    .first<{ value: string }>();
+  if (row?.value) return constantTimeEqual(await sha256(received), row.value);
+  return constantTimeEqual(received, legacySecret);
+}
+
+async function authorizedMcp(request: Request, env: Env): Promise<boolean> {
   const authorization = request.headers.get("authorization") || "";
   const received = authorization.replace(/^Bearer\s+/i, "");
-  return constantTimeEqual(received, env.MCP_ACCESS_KEY);
+  return tokenMatches(env, "mcp_token_hash", received, env.MCP_ACCESS_KEY);
 }
 
 async function latestMetric(env: Env, metric: MetricName): Promise<unknown> {
@@ -589,7 +633,7 @@ async function latestSleep(env: Env): Promise<unknown> {
 
 async function todayActivity(env: Env): Promise<unknown[]> {
   const now = new Date().toISOString();
-  const day = localDay(now, env.HEALTH_TIME_ZONE || "UTC");
+  const day = localDay(now, env.HEALTH_TIME_ZONE || DEFAULT_TIME_ZONE);
   const result = await env.DB.prepare(
     `SELECT metric, ROUND(SUM(value), 2) AS value, unit
      FROM metric_samples
@@ -694,7 +738,10 @@ async function healthTrends(env: Env, args: JsonObject): Promise<unknown> {
   const days = [7, 14, 30].includes(Number(args.days)) ? Number(args.days) : 7;
   const start = new Date();
   start.setUTCDate(start.getUTCDate() - days + 1);
-  const startDay = localDay(start.toISOString(), env.HEALTH_TIME_ZONE || "UTC");
+  const startDay = localDay(
+    start.toISOString(),
+    env.HEALTH_TIME_ZONE || DEFAULT_TIME_ZONE,
+  );
 
   const [sleepResult, metricResult] = await Promise.all([
     env.DB.prepare(
@@ -777,7 +824,7 @@ async function callTool(
 }
 
 async function mcp(request: Request, env: Env): Promise<Response> {
-  if (!authorizedMcp(request, env)) {
+  if (!(await authorizedMcp(request, env))) {
     return json(
       {
         jsonrpc: "2.0",
@@ -858,6 +905,200 @@ async function mcp(request: Request, env: Env): Promise<Response> {
   return rpcError(body.id, -32601, "不认识这个 MCP 请求。", env);
 }
 
+function html(body: string, status = 200): Response {
+  return new Response(body, {
+    status,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+      "content-security-policy":
+        "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; " +
+        "img-src data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+      "referrer-policy": "no-referrer",
+      "x-content-type-options": "nosniff",
+    },
+  });
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function setupShell(content: string): string {
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>Apple 健康 MCP 设置</title>
+  <style>
+    :root{color-scheme:light;--ink:#172033;--blue:#2563eb;--teal:#0f766e;
+      --pale:#eef4ff;--line:#d5deeb;--danger:#b42318}
+    *{box-sizing:border-box}body{margin:0;background:#f6f8fc;color:var(--ink);
+      font:17px/1.65 -apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif}
+    main{max-width:680px;margin:auto;padding:28px 18px 60px}
+    .card{background:white;border:1px solid var(--line);border-radius:22px;
+      padding:24px;box-shadow:0 12px 32px #17203312}
+    h1{font-size:30px;line-height:1.2;margin:0 0 12px}h2{font-size:21px;margin:28px 0 8px}
+    .tag{display:inline-block;color:var(--teal);background:#e8f7f4;border-radius:99px;
+      padding:4px 11px;font-weight:700;font-size:14px;margin-bottom:18px}
+    label{display:block;font-weight:700;margin:18px 0 8px}
+    input{width:100%;font:inherit;padding:13px 14px;border:1px solid var(--line);
+      border-radius:12px;background:white}
+    button,.button{width:100%;display:block;text-align:center;border:0;border-radius:13px;
+      padding:14px 16px;margin-top:14px;background:var(--blue);color:white;
+      font:700 17px/1.2 inherit;text-decoration:none}
+    button.secondary{background:var(--teal)}button.copy{margin-top:8px;background:#172033}
+    code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--teal);
+      overflow-wrap:anywhere}.secret{padding:13px;border-radius:12px;background:var(--pale);
+      border:1px solid #c8d8fb;overflow-wrap:anywhere}
+    .warning{padding:12px 14px;background:#fff3f1;color:var(--danger);border-radius:12px}
+    .ok{padding:12px 14px;background:#eaf8f0;color:#087443;border-radius:12px}
+    small{color:#526174}ol{padding-left:24px}
+  </style>
+</head>
+<body><main><div class="card">${content}</div></main>
+<script>
+  document.querySelectorAll("[data-copy]").forEach(function(button){
+    button.addEventListener("click",async function(){
+      await navigator.clipboard.writeText(button.getAttribute("data-copy"));
+      var old=button.textContent;button.textContent="已复制 ✓";
+      setTimeout(function(){button.textContent=old},1200);
+    });
+  });
+</script></body></html>`;
+}
+
+async function setupStatus(env: Env): Promise<boolean> {
+  await ensureSchema(env);
+  const row = await env.DB.prepare(
+    "SELECT value FROM app_settings WHERE key = 'setup_completed_at'",
+  ).first<{ value: string }>();
+  return Boolean(row?.value);
+}
+
+function setupForm(origin: string, completed: boolean, configured: boolean): Response {
+  if (!configured) {
+    return html(
+      setupShell(`
+        <div class="tag">手机设置</div>
+        <h1>还差一个部署密码</h1>
+        <p class="warning">Cloudflare 没有收到 <code>SETUP_KEY</code>。请回到部署页面，
+        为它填写一串只有你知道的长密码，然后重新部署。</p>
+      `),
+      503,
+    );
+  }
+  const action = `${origin}/setup/claim`;
+  return html(
+    setupShell(`
+      <div class="tag">手机设置 · 中国时区</div>
+      <h1>${completed ? "重新领取两把钥匙" : "领取两把私人钥匙"}</h1>
+      <p>${completed
+        ? "这里已经设置过。只有知道部署密码的人才能换新钥匙。"
+        : "输入你在 Cloudflare 一键部署页面填写的部署密码。系统会在这里生成上传钥匙和 AI 钥匙。"}</p>
+      ${completed
+        ? '<p class="warning">重新生成后，iPhone 和 AI 里的旧钥匙会立刻失效。</p>'
+        : ""}
+      <form method="post" action="${escapeHtml(action)}">
+        <label for="setup-key">部署密码</label>
+        <input id="setup-key" name="setup_key" type="password" minlength="12"
+          autocomplete="current-password" required placeholder="至少 12 个字符">
+        <button type="submit">${completed ? "我确定，要换新钥匙" : "生成两把钥匙"}</button>
+      </form>
+      <p><small>密码不会写进网址。不要把它或生成的钥匙发到群里。</small></p>
+    `),
+  );
+}
+
+function randomToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  const binary = [...bytes].map((byte) => String.fromCharCode(byte)).join("");
+  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/g, "");
+}
+
+async function claimSetup(request: Request, env: Env): Promise<Response> {
+  if (!env.SETUP_KEY || env.SETUP_KEY.length < 12) {
+    return html(setupShell("<h1>部署密码没有正确设置</h1>"), 503);
+  }
+  let form: FormData;
+  try {
+    form = await request.formData();
+  } catch {
+    return html(setupShell("<h1>表单格式不正确</h1>"), 400);
+  }
+  const received = String(form.get("setup_key") || "");
+  if (!constantTimeEqual(received, env.SETUP_KEY)) {
+    return html(
+      setupShell(`
+        <h1>部署密码不对</h1>
+        <p class="warning">请返回上一页重新输入。不要连续猜别人的密码。</p>
+        <a class="button" href="/setup">返回设置页</a>
+      `),
+      403,
+    );
+  }
+
+  await ensureSchema(env);
+  const uploadToken = randomToken();
+  const mcpToken = randomToken();
+  const now = new Date().toISOString();
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO app_settings(key, value, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    ).bind("upload_token_hash", await sha256(uploadToken), now),
+    env.DB.prepare(
+      `INSERT INTO app_settings(key, value, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    ).bind("mcp_token_hash", await sha256(mcpToken), now),
+    env.DB.prepare(
+      `INSERT INTO app_settings(key, value, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    ).bind("setup_completed_at", now, now),
+  ]);
+
+  const origin = new URL(request.url).origin;
+  const ingestUrl = `${origin}/ingest`;
+  const mcpUrl = `${origin}/mcp`;
+  const guideUrl =
+    env.GUIDE_URL ||
+    "https://github.com/shenqingmo3-dotcom/apple-health-shortcuts-mcp/blob/main/GUIDE-MOBILE.zh-CN.md";
+  return html(
+    setupShell(`
+      <div class="tag">设置成功</div>
+      <h1>现在把钥匙收好</h1>
+      <p class="ok">两把钥匙已经生成。服务器只保存它们的“指纹”，关闭本页后无法找回原文。</p>
+      <h2>① iPhone 上传地址</h2>
+      <div class="secret"><code>${escapeHtml(ingestUrl)}</code></div>
+      <button class="copy" type="button" data-copy="${escapeHtml(ingestUrl)}">复制上传地址</button>
+      <h2>② iPhone 上传钥匙</h2>
+      <div class="secret"><code>${escapeHtml(uploadToken)}</code></div>
+      <button class="copy" type="button" data-copy="${escapeHtml(uploadToken)}">复制上传钥匙</button>
+      <h2>③ AI 的 MCP 地址</h2>
+      <div class="secret"><code>${escapeHtml(mcpUrl)}</code></div>
+      <button class="copy" type="button" data-copy="${escapeHtml(mcpUrl)}">复制 MCP 地址</button>
+      <h2>④ AI 的 Bearer Token</h2>
+      <div class="secret"><code>${escapeHtml(mcpToken)}</code></div>
+      <button class="copy" type="button" data-copy="${escapeHtml(mcpToken)}">复制 AI 钥匙</button>
+      <h2>下一步</h2>
+      <ol>
+        <li>先把四项内容存进 iPhone“密码”或私人备忘录。</li>
+        <li>照手机教程创建两个快捷指令。</li>
+        <li>AI 连接后应看到 3 个只读工具。</li>
+      </ol>
+      <a class="button" href="${escapeHtml(guideUrl)}">打开手机快捷指令教程</a>
+      <p class="warning">不要截图发群。忘记钥匙时，回到 <code>/setup</code> 用部署密码重新生成。</p>
+    `),
+  );
+}
+
 async function cleanup(env: Env): Promise<void> {
   await ensureSchema(env);
   const rawDays = clampNumber(env.RAW_RETENTION_DAYS, 35, 7, 365);
@@ -875,6 +1116,16 @@ async function cleanup(env: Env): Promise<void> {
 export async function handleRequest(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   if (request.method === "OPTIONS") return json({ ok: true }, 200, env);
+  if (request.method === "GET" && url.pathname === "/setup") {
+    return setupForm(
+      url.origin,
+      await setupStatus(env),
+      Boolean(env.SETUP_KEY && env.SETUP_KEY.length >= 12),
+    );
+  }
+  if (request.method === "POST" && url.pathname === "/setup/claim") {
+    return claimSetup(request, env);
+  }
   if (request.method === "GET" && url.pathname === "/healthz") {
     return json(
       {
@@ -892,6 +1143,7 @@ export async function handleRequest(request: Request, env: Env): Promise<Respons
         name: "Apple Health Shortcuts MCP",
         private_data: "不会在这里显示",
         endpoints: {
+          setup: "GET /setup",
           upload: "POST /ingest",
           mcp: "POST /mcp",
           check: "GET /healthz",

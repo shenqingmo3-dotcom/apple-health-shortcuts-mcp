@@ -4,8 +4,37 @@ import {
   handleRequest,
   normalizeIngestPayload,
   TOOLS,
+  type D1Database,
   type Env,
 } from "./index";
+
+function fakeDatabase(firstValue: unknown = null): D1Database {
+  const statement = {
+    bind() {
+      return this;
+    },
+    async run() {
+      return { success: true };
+    },
+    async all() {
+      return { success: true, results: [] };
+    },
+    async first() {
+      return firstValue;
+    },
+  };
+  return {
+    prepare() {
+      return statement;
+    },
+    async batch() {
+      return [];
+    },
+    async exec() {
+      return undefined;
+    },
+  } as D1Database;
+}
 
 describe("clean-room health payload", () => {
   it("accepts simple Shortcut metric cards", () => {
@@ -100,6 +129,58 @@ describe("public surface", () => {
     expect(await response.json()).toMatchObject({
       ok: true,
       service: "apple-health-shortcuts-mcp",
+    });
+  });
+
+  it("offers a mobile setup page and refuses an unset deployment password", async () => {
+    const response = await handleRequest(
+      new Request("https://example.test/setup"),
+      { DB: fakeDatabase() } as Env,
+    );
+    expect(response.status).toBe(503);
+    expect(await response.text()).toContain("SETUP_KEY");
+  });
+
+  it("generates the two private keys from a phone form", async () => {
+    const request = new Request("https://example.test/setup/claim", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "setup_key=a-very-long-setup-password",
+    });
+    const response = await handleRequest(request, {
+      DB: fakeDatabase(),
+      SETUP_KEY: "a-very-long-setup-password",
+    });
+    const page = await response.text();
+    expect(response.status).toBe(200);
+    expect(page).toContain("复制上传钥匙");
+    expect(page).toContain("复制 AI 钥匙");
+    expect(page).toContain("https://example.test/mcp");
+  });
+
+  it("accepts an MCP token stored only as a fingerprint", async () => {
+    const token = "this-token-is-never-stored-as-plain-text";
+    const digest = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(token),
+    );
+    const hash = [...new Uint8Array(digest)]
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("");
+    const response = await handleRequest(
+      new Request("https://example.test/mcp", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize" }),
+      }),
+      { DB: fakeDatabase({ value: hash }) } as Env,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      result: { serverInfo: { name: "apple-health-shortcuts-mcp" } },
     });
   });
 });

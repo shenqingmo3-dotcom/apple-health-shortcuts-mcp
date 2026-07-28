@@ -4,6 +4,8 @@
 
 版本：1.0（2026 年 7 月）
 
+> 这是保留给开发者和排错使用的电脑高级版。普通用户请看 [只用手机的一键部署教程](GUIDE-MOBILE.zh-CN.md)。
+
 > 先说人话：手表把数据交给 iPhone；iPhone 的“快捷指令”每天抄一份；Cloudflare 替你保管；AI 需要时再来读。
 
 这份教程没有使用任何付费健康导出 App。代码是独立写的，采用 MIT 开源许可证。每个人应部署自己的那一份，不要多人共用一把钥匙。
@@ -108,17 +110,17 @@ database_id = "PASTE_YOUR_D1_DATABASE_ID_HERE"
 同一个文件里还有：
 
 ```toml
-HEALTH_TIME_ZONE = "Pacific/Auckland"
+HEALTH_TIME_ZONE = "Asia/Shanghai"
 ```
 
-如果你在新西兰，不用改。
+如果你在中国大陆，不用改。
 
 常见例子：
 
 | 地方 | 填什么 |
 |---|---|
-| 新西兰 | `Pacific/Auckland` |
 | 中国大陆 | `Asia/Shanghai` |
+| 新西兰 | `Pacific/Auckland` |
 | 日本 | `Asia/Tokyo` |
 | 英国 | `Europe/London` |
 | 美国洛杉矶 | `America/Los_Angeles` |
@@ -585,4 +587,3 @@ Cloudflare 当前默认提供 Workers 免费计划；官方文档列出的免费
 - [ ] `my-keys.local` 没有发给别人
 
 全部打勾，就完成了。
-

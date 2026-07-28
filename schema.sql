@@ -30,3 +30,9 @@ CREATE TABLE IF NOT EXISTS sleep_nights (
 
 CREATE INDEX IF NOT EXISTS idx_sleep_nights_date
   ON sleep_nights(night_date DESC);
+
+CREATE TABLE IF NOT EXISTS app_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
