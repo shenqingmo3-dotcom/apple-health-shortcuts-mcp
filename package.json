@@ -1,0 +1,18 @@
+{
+  "name": "apple-health-shortcuts-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A clean-room Apple Shortcuts to Cloudflare D1 to HTTP MCP bridge.",
+  "scripts": {
+    "test": "vitest run",
+    "check": "wrangler deploy --dry-run --outdir .wrangler-dist",
+    "deploy": "wrangler deploy",
+    "make-keys": "node scripts/make-keys.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.9",
+    "wrangler": "^4.11.1"
+  }
+}

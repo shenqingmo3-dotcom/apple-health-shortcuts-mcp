@@ -1,0 +1,17 @@
+name = "apple-health-shortcuts-mcp"
+main = "src/index.ts"
+compatibility_date = "2026-07-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "apple-health-shortcuts"
+database_id = "PASTE_YOUR_D1_DATABASE_ID_HERE"
+
+[vars]
+HEALTH_TIME_ZONE = "Pacific/Auckland"
+MCP_ALLOW_ORIGIN = "*"
+RAW_RETENTION_DAYS = "35"
+SLEEP_RETENTION_DAYS = "120"
+
+[triggers]
+crons = ["23 3 * * *"]
