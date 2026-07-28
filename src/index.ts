@@ -250,6 +250,12 @@ CREATE TABLE IF NOT EXISTS app_settings (
 );
 `;
 
+const SCHEMA_EXEC_SQL = SCHEMA_SQL.split(";")
+  .map((statement) => statement.replace(/\s+/g, " ").trim())
+  .filter(Boolean)
+  .map((statement) => `${statement};`)
+  .join("\n");
+
 function json(data: unknown, status = 200, env?: Env): Response {
   return new Response(JSON.stringify(data, null, 2), {
     status,
@@ -456,7 +462,7 @@ export function aggregateSleep(
 }
 
 async function ensureSchema(env: Env): Promise<void> {
-  await env.DB.exec(SCHEMA_SQL);
+  await env.DB.exec(SCHEMA_EXEC_SQL);
 }
 
 async function ingest(request: Request, env: Env): Promise<Response> {

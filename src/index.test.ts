@@ -8,7 +8,10 @@ import {
   type Env,
 } from "./index";
 
-function fakeDatabase(firstValue: unknown = null): D1Database {
+function fakeDatabase(
+  firstValue: unknown = null,
+  onExec?: (query: string) => void,
+): D1Database {
   const statement = {
     bind() {
       return this;
@@ -30,7 +33,8 @@ function fakeDatabase(firstValue: unknown = null): D1Database {
     async batch() {
       return [];
     },
-    async exec() {
+    async exec(query: string) {
+      onExec?.(query);
       return undefined;
     },
   } as D1Database;
@@ -139,6 +143,27 @@ describe("public surface", () => {
     );
     expect(response.status).toBe(503);
     expect(await response.text()).toContain("SETUP_KEY");
+  });
+
+  it("sends complete single-line schema statements to D1 exec", async () => {
+    const executed: string[] = [];
+    const response = await handleRequest(
+      new Request("https://example.test/setup"),
+      {
+        DB: fakeDatabase(null, (query) => executed.push(query)),
+      } as Env,
+    );
+
+    expect(response.status).toBe(503);
+    expect(executed).toHaveLength(1);
+    const statements = executed[0].split("\n");
+    expect(statements).toHaveLength(6);
+    expect(statements[0]).toContain(
+      "CREATE TABLE IF NOT EXISTS metric_samples",
+    );
+    expect(statements[0]).toContain("PRIMARY KEY (metric, measured_at)");
+    expect(statements.every((statement) => statement.endsWith(";"))).toBe(true);
+    expect(statements.every((statement) => !statement.endsWith("("))).toBe(true);
   });
 
   it("generates the two private keys from a phone form", async () => {
