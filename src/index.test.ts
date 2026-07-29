@@ -104,6 +104,26 @@ describe("clean-room health payload", () => {
     });
   });
 
+  it("accepts Apple sleep labels containing punctuation", () => {
+    const normalized = normalizeIngestPayload({
+      sleep: [
+        {
+          stage: "Asleep (Unspecified)",
+          start: "2026-07-27T00:00:00+08:00",
+          end: "2026-07-27T01:00:00+08:00",
+        },
+        {
+          stage: "REM Sleep",
+          start: "2026-07-27T01:00:00+08:00",
+          end: "2026-07-27T01:30:00+08:00",
+        },
+      ],
+    });
+
+    expect(normalized.errors).toEqual([]);
+    expect(normalized.sleep.map((row) => row.stage)).toEqual(["asleep", "rem"]);
+  });
+
   it("skips broken cards and explains why", () => {
     const result = normalizeIngestPayload({
       metrics: [{ type: "heart_rate", value: "nothing", at: "today" }],
@@ -112,6 +132,7 @@ describe("clean-room health payload", () => {
     expect(result.metrics).toEqual([]);
     expect(result.sleep).toEqual([]);
     expect(result.errors).toHaveLength(2);
+    expect(result.errors[1]).toContain("睡眠阶段无法识别");
   });
 });
 

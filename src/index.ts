@@ -127,19 +127,26 @@ const SLEEP_ALIASES: Record<string, SleepSegment["stage"]> = {
   inbed: "awake",
   "清醒": "awake",
   "卧床": "awake",
+  "在床上": "awake",
+  "床上": "awake",
   asleep: "asleep",
   asleepunspecified: "asleep",
+  "睡眠未指定": "asleep",
+  "睡着未指定": "asleep",
   "睡眠": "asleep",
   "睡着": "asleep",
   core: "core",
+  coresleep: "core",
   asleepcore: "core",
   "核心": "core",
   "核心睡眠": "core",
   deep: "deep",
+  deepsleep: "deep",
   asleepdeep: "deep",
   "深度": "deep",
   "深度睡眠": "deep",
   rem: "rem",
+  remsleep: "rem",
   asleeprem: "rem",
   "快速眼动": "rem",
   "快速眼动睡眠": "rem",
@@ -287,7 +294,10 @@ function rpcError(
 }
 
 function cleanKey(value: unknown): string {
-  return String(value ?? "").trim().toLowerCase().replace(/[\s_-]+/g, "");
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, "");
 }
 
 function normalizeMetricName(value: unknown): MetricName | null {
@@ -374,11 +384,25 @@ export function normalizeIngestPayload(body: unknown): NormalizedIngest {
       return;
     }
     const item = row as JsonObject;
-    const stage = normalizeStage(item.stage ?? item.value ?? item.type);
+    const rawStage = item.stage ?? item.value ?? item.type;
+    const stage = normalizeStage(rawStage);
     const start = isoDate(item.start ?? item.start_date ?? item.startDate);
     const end = isoDate(item.end ?? item.end_date ?? item.endDate);
-    if (!stage || !start || !end || new Date(end) <= new Date(start)) {
-      errors.push(`第 ${index + 1} 条睡眠数据缺少正确的 stage、start 或 end。`);
+    if (!stage) {
+      const received = String(rawStage ?? "").trim() || "空值";
+      errors.push(`第 ${index + 1} 条睡眠阶段无法识别（收到：${received}）。`);
+      return;
+    }
+    if (!start) {
+      errors.push(`第 ${index + 1} 条睡眠数据的开始时间无效。`);
+      return;
+    }
+    if (!end) {
+      errors.push(`第 ${index + 1} 条睡眠数据的结束时间无效。`);
+      return;
+    }
+    if (new Date(end) <= new Date(start)) {
+      errors.push(`第 ${index + 1} 条睡眠数据的结束时间必须晚于开始时间。`);
       return;
     }
     sleep.push({ stage, start, end });
