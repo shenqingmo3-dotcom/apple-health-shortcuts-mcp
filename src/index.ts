@@ -126,6 +126,7 @@ const SLEEP_ALIASES: Record<string, SleepSegment["stage"]> = {
   awake: "awake",
   inbed: "awake",
   "清醒": "awake",
+  "清醒时间": "awake",
   "卧床": "awake",
   "在床上": "awake",
   "床上": "awake",
@@ -134,6 +135,7 @@ const SLEEP_ALIASES: Record<string, SleepSegment["stage"]> = {
   "睡眠未指定": "asleep",
   "睡着未指定": "asleep",
   "睡眠": "asleep",
+  "睡眠时间": "asleep",
   "睡着": "asleep",
   core: "core",
   coresleep: "core",
@@ -150,6 +152,7 @@ const SLEEP_ALIASES: Record<string, SleepSegment["stage"]> = {
   asleeprem: "rem",
   "快速眼动": "rem",
   "快速眼动睡眠": "rem",
+  "快速动眼睡眠": "rem",
 };
 
 const ACTIVITY_METRICS = new Set<MetricName>([

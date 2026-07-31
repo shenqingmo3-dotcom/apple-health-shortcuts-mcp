@@ -124,6 +124,35 @@ describe("clean-room health payload", () => {
     expect(normalized.sleep.map((row) => row.stage)).toEqual(["asleep", "rem"]);
   });
 
+  it("accepts Chinese Apple Health duration labels", () => {
+    const normalized = normalizeIngestPayload({
+      sleep: [
+        {
+          stage: "快速动眼睡眠",
+          start: "2026-07-27T00:00:00+08:00",
+          end: "2026-07-27T01:00:00+08:00",
+        },
+        {
+          stage: "清醒时间",
+          start: "2026-07-27T01:00:00+08:00",
+          end: "2026-07-27T01:10:00+08:00",
+        },
+        {
+          stage: "睡眠时间",
+          start: "2026-07-27T01:10:00+08:00",
+          end: "2026-07-27T02:00:00+08:00",
+        },
+      ],
+    });
+
+    expect(normalized.errors).toEqual([]);
+    expect(normalized.sleep.map((row) => row.stage)).toEqual([
+      "rem",
+      "awake",
+      "asleep",
+    ]);
+  });
+
   it("skips broken cards and explains why", () => {
     const result = normalizeIngestPayload({
       metrics: [{ type: "heart_rate", value: "nothing", at: "today" }],
